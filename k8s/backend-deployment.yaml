@@ -1,0 +1,91 @@
+# Backend Deployment + Service + HPA.
+#
+# Replicas: start at 3 for fault tolerance (one node failure = 33% capacity
+# loss instead of 50%). Scale-out is driven by CPU + custom metrics.
+#
+# Key points:
+#   - INSTANCE_ID = pod name -> stable per-replica identity for Redis filters
+#   - Liveness on /health, readiness too (fail readiness immediately on
+#     SIGTERM so the LB stops sending new connections during rollout)
+#   - terminationGracePeriodSeconds=60 to let the WS drain logic finish
+#   - PodDisruptionBudget to prevent voluntary disruption taking too many
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collab-backend
+  labels: { app: collab-backend }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: collab-backend } }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }   # zero-downtime
+  template:
+    metadata: { labels: { app: collab-backend } }
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: backend
+        image: registry.example.com/collab-backend:latest
+        ports: [{ containerPort: 4000, name: http }]
+        env:
+        - name: PORT
+          value: "4000"
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        - name: EXEC_ENGINE_URL
+          value: "http://exec-engine:7000"
+        - name: INSTANCE_ID
+          valueFrom: { fieldRef: { fieldPath: metadata.name } }
+        - name: JWT_SECRET
+          valueFrom: { secretKeyRef: { name: collab-secrets, key: jwt } }
+        - name: OPENAI_API_KEY
+          valueFrom: { secretKeyRef: { name: collab-secrets, key: openai } }
+        resources:
+          requests: { cpu: "200m", memory: "256Mi" }
+          limits:   { cpu: "1000m", memory: "1Gi" }
+        readinessProbe:
+          httpGet: { path: /health, port: 4000 }
+          periodSeconds: 5
+        livenessProbe:
+          httpGet: { path: /health, port: 4000 }
+          periodSeconds: 10
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: collab-backend
+spec:
+  selector: { app: collab-backend }
+  ports: [{ port: 4000, targetPort: 4000, name: http }]
+  # ClusterIP — the Ingress fronts it; sticky sessions handled there.
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: collab-backend-pdb }
+spec:
+  minAvailable: 2
+  selector: { matchLabels: { app: collab-backend } }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: collab-backend-hpa }
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: collab-backend
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target: { type: Utilization, averageUtilization: 65 }
+  # Custom metric: WS connections per pod (requires a metrics adapter
+  # like prometheus-adapter exposing this from your Prom server).
+  - type: Pods
+    pods:
+      metric: { name: websocket_connections }
+      target: { type: AverageValue, averageValue: "1500" }

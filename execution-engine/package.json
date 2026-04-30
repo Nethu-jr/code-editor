@@ -1,0 +1,12 @@
+{
+  "name": "collab-editor-exec-engine",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/runner.js",
+  "scripts": {
+    "start": "node src/runner.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

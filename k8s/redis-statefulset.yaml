@@ -1,0 +1,41 @@
+# Redis as a StatefulSet because it has stable identity + persistent
+# storage. For real production you'd run Redis Cluster (sharded across
+# 6+ nodes, 3 primary + 3 replica) — see k8s/redis-cluster.yaml in a
+# real repo. This single-node manifest is a starting point.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: redis }
+spec:
+  serviceName: redis
+  replicas: 1
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        args: ["redis-server", "--appendonly", "yes", "--maxmemory", "2gb", "--maxmemory-policy", "allkeys-lru"]
+        ports: [{ containerPort: 6379, name: redis }]
+        resources:
+          requests: { cpu: "200m", memory: "1Gi" }
+          limits:   { cpu: "1",    memory: "2.5Gi" }
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        readinessProbe:
+          exec: { command: ["redis-cli", "ping"] }
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata: { name: data }
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources: { requests: { storage: 20Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redis }
+spec:
+  selector: { app: redis }
+  ports: [{ port: 6379, targetPort: 6379 }]
+  clusterIP: None    # headless — pods get stable DNS (redis-0.redis...)

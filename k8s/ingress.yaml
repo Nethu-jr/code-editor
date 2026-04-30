@@ -1,0 +1,34 @@
+# Ingress with cookie-based session affinity for WS stickiness.
+# Requires nginx-ingress controller (or any ingress that supports the
+# annotations below). For AWS ALB use `alb.ingress.kubernetes.io/target-group-attributes`
+# with `stickiness.enabled=true`.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: collab-ingress
+  annotations:
+    # Stickiness: route all packets of one client to the same backend pod.
+    # Cookie-based is more reliable than ip_hash for users behind big NATs.
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "collab-route"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "86400"
+    # WS upgrade + long timeouts
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # TLS: use cert-manager
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts: [collab.example.com]
+    secretName: collab-tls
+  rules:
+  - host: collab.example.com
+    http:
+      paths:
+      - path: /ws
+        pathType: Prefix
+        backend: { service: { name: collab-backend, port: { number: 4000 } } }
+      - path: /
+        pathType: Prefix
+        backend: { service: { name: collab-backend, port: { number: 4000 } } }
