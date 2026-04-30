@@ -1,5 +1,7 @@
 # Real-Time Collaborative Code Editor
 
+![Editor Preview](docs/editor-preview.png)
+
 A production-grade, horizontally scalable collaborative code editor with Operational Transformation, AI assistance, and sandboxed multi-language execution. Think VS Code Live Share, but built from scratch with the data-structure choices justified.
 
 ## What's in here
