@@ -1,4 +1,4 @@
-# Real-Time Collaborative Code Editor
+# LiveCode Editor
 
 ![Editor Preview](docs/editor-preview.png)
 

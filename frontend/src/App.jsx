@@ -33,7 +33,7 @@ export default function App() {
         padding: '8px 12px', borderBottom: '1px solid #333', color: '#ddd',
         display: 'flex', gap: 12, alignItems: 'center',
       }}>
-        <strong style={{ fontSize: 14 }}>Collab Editor</strong>
+        <strong style={{ fontSize: 14 }}>LiveCode Editor</strong>
         <span style={{ fontSize: 12, color: '#888' }}>session: {sessionId}</span>
         <span style={{ fontSize: 12, color: '#888' }}>you: {userId}</span>
         <select value={language} onChange={(e) => setLanguage(e.target.value)}

@@ -1,5 +1,5 @@
 {
-  "name": "collab-editor-exec-engine",
+  "name": "livecode-editor-exec-engine",
   "version": "1.0.0",
   "private": true,
   "main": "src/runner.js",
