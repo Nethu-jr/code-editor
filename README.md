@@ -188,7 +188,3 @@ The HPA in `backend-deployment.yaml` scales pods on CPU + WebSocket connection c
 - **No end-to-end metrics.** Add Prometheus on event-loop lag, op-queue depth, p99 transform latency, Redis fanout latency.
 
 These are flagged in code comments where relevant.
-
-## License
-
-MIT — use freely.
