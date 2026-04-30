@@ -40,19 +40,17 @@ const LANG = {
   python: {
     image: 'python:3.12-alpine',
     file: 'main.py',
-    cmd: ['python', '/work/main.py'],
+    cmd: 'python /work/main.py',
   },
   javascript: {
     image: 'node:20-alpine',
     file: 'main.js',
-    cmd: ['node', '/work/main.js'],
+    cmd: 'node /work/main.js',
   },
   cpp: {
-    image: 'gcc:13-bookworm-slim',
+    image: 'gcc:13',
     file: 'main.cpp',
-    // compile then run; both inside the container in one shell.
-    // We use sh -lc so we get exit code propagation.
-    cmd: ['sh', '-lc', 'g++ -O2 -std=c++17 -o /tmp/a.out /work/main.cpp && /tmp/a.out'],
+    cmd: 'g++ -O2 -std=c++17 -o /tmp/a.out /work/main.cpp && /tmp/a.out',
   },
 };
 
@@ -66,13 +64,8 @@ app.post('/run', async (req, res) => {
     return res.status(400).json({ ok: false, stderr: 'invalid or too-large code' });
   }
 
-  // Write code to a private temp dir that we mount read-only into the container.
-  const id = randomUUID();
-  const dir = path.join(os.tmpdir(), `runbox-${id}`);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
-  const filePath = path.join(dir, cfg.file);
-  fs.writeFileSync(filePath, code, { mode: 0o644 });
-
+  // Pass code via base64 to avoid Docker-in-Docker volume mount issues on Windows/macOS.
+  const encodedCode = Buffer.from(code).toString('base64');
   const timeoutSeconds = Math.max(1, Math.min(15, Math.ceil(timeoutMs / 1000)));
 
   const args = [
@@ -80,16 +73,17 @@ app.post('/run', async (req, res) => {
     '--network', 'none',
     '--read-only',
     '--tmpfs', '/tmp:rw,exec,size=64m',  // exec needed for cpp's a.out
+    '--tmpfs', '/work:rw,exec,size=64m',
     '--memory=128m',
     '--memory-swap=128m',                // disable swap
     '--cpus=0.5',
     '--pids-limit', '64',
     '--cap-drop=ALL',
     '--security-opt', 'no-new-privileges',
-    '-v', `${dir}:/work:ro`,
     '-w', '/work',
     cfg.image,
-    ...cfg.cmd,
+    'sh', '-c',
+    `echo "${encodedCode}" | base64 -d > ${cfg.file} && ${cfg.cmd}`
   ];
 
   // Wall-clock timeout: docker has --stop-timeout but easier to enforce
@@ -111,7 +105,6 @@ app.post('/run', async (req, res) => {
 
   child.on('close', (code) => {
     clearTimeout(killer);
-    fs.rm(dir, { recursive: true, force: true }, () => {});
     res.json({
       ok: code === 0 && !killed,
       exitCode: code,
@@ -123,7 +116,6 @@ app.post('/run', async (req, res) => {
 
   child.on('error', (err) => {
     clearTimeout(killer);
-    fs.rm(dir, { recursive: true, force: true }, () => {});
     res.status(500).json({ ok: false, stderr: `engine error: ${err.message}` });
   });
 });
